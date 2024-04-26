@@ -39,7 +39,6 @@ lazy val tests = crossProject(JVMPlatform)
   .enablePlugins(NoPublishPlugin)
   .dependsOn(core)
   .settings(
-    scalacOptions += "-language:implicitConversions",
     libraryDependencies ++= Seq(
       "org.scalameta" %% "munit" % "0.7.29" % Test,
       "com.disneystreaming.smithy4s" %%% "smithy4s-dynamic" % "0.18.16" % Test,

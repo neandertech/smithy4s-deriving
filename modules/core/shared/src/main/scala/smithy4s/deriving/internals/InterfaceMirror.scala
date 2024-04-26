@@ -59,11 +59,7 @@ object InterfaceMirror:
     val decls = cls.declaredMethods.filterNot(encodesDefaultParameter)
     val labels = decls.map(m => ConstantType(StringConstant(m.name)))
 
-    def isMeta(annot: Term): Boolean =
-      if annot.tpe <:< TypeRepr.of[MetaAnnotation] then true
-      else
-        report.info(s"annotation ${annot.show} does not extend ${Type.show[MetaAnnotation]}", annot.pos)
-        false
+    def isMeta(annot: Term): Boolean = annot.tpe <:< TypeRepr.of[MetaAnnotation]
 
     def encodeMeta(annot: Term): Type[?] = AnnotatedType(TypeRepr.of[Meta], annot).asType
 

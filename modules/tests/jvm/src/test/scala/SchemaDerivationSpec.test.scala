@@ -57,6 +57,25 @@ class SchemaDerivationSpec() extends SchemaSuite {
     checkDynamic(Foo(1, Some("y")))
   }
 
+  test("case class (defaults)") {
+
+    case class Foo(x: Int = 1, y: Option[String] = None) derives Schema
+
+    val expected = """|$version: "2"
+                      |
+                      |namespace smithy4s.deriving.schemaDerivationSpec
+                      |
+                      |structure Foo {
+                      |  @required
+                      |  x: Integer = 1
+                      |  y: String
+                      |}
+                      |""".stripMargin
+
+    checkSchema[Foo](expected)
+    checkDynamic(Foo(1, Some("y")))
+  }
+
   test("case class (recursive)") {
 
     case class Foo(foo: Option[Foo]) derives Schema

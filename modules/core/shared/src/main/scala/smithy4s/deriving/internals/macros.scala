@@ -172,10 +172,10 @@ def derivedAPIImpl[T: Type, F[_]: Type](
   }
 }
 
+private def uncapitalise(str: String) = if (str.nonEmpty) str.head.toLower.toString + str.drop(1) else str
 private def getNamespace[T: Type](using Quotes) : String = {
   import quotes.reflect.*
   val tpe = TypeRepr.of[T]
-  def uncapitalise(str: String) = if (str.nonEmpty) str.head.toLower.toString + str.drop(1) else str
   val cls = tpe.classSymbol.getOrElse(report.errorAndAbort(s"type ${tpe.show} is not a class"))
   val result = cls.fullName.split('.').dropRight(1).map(_.filter(_.isLetterOrDigit)).map(uncapitalise).mkString(".")
   if (result.isEmpty) "default" else result
@@ -403,20 +403,20 @@ private def operationSchemasExpression[Ts: Type, OpLabels: Type, F[_]: Type](
           val errorSchemas = summonSchemas[errorTypes, errorTypes]
 
           import quotes.reflect._
-          val nsExpr = Expr(serviceNamespace)
-          val opInputNameExpr = Expr(serviceName + "_" + opName + "Input")
-          val opOutputNameExpr = Expr(serviceName + "_" + opName + "Output")
+          val nestedNs = Expr(serviceNamespace + "." + uncapitalise(serviceName))
+          val opInputNameExpr = Expr(opName + "Input")
+          val opOutputNameExpr = Expr(opName + "Output")
           val inputSchema = '{
             val fields = $fieldsExpr.toVector
             Schema
               .struct(fields)(seq => Tuple.fromArray(seq.toArray).asInstanceOf[inputTypes])
-              .withId($nsExpr, $opInputNameExpr)
+              .withId($nestedNs, $opInputNameExpr)
               .addHints(ShapeId("smithy.api", "input") -> Document.obj())
           }
-          val outputSchema = '{ summonInline[Schema[outputType]].compile(wrapOutputSchema(ShapeId($nsExpr, $opOutputNameExpr), $outputDocs))}
+          val outputSchema = '{ summonInline[Schema[outputType]].compile(wrapOutputSchema(ShapeId($nestedNs, $opOutputNameExpr), $outputDocs))}
           val opSchemaWithoutError = '{
             Schema
-              .operation(ShapeId(${Expr(serviceNamespace)}, ${ Expr(serviceName + "_" + opName) }))
+              .operation(ShapeId($nestedNs, ${ Expr(opName) }))
               .withInput($inputSchema)
               .withOutput($outputSchema)
               .withHints($opHints)

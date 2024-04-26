@@ -32,7 +32,7 @@ import smithy4s.deriving.EffectMirror
 @experimental
 class ApiDerivationSpec() extends APISuite {
 
-  case class Bar(x: Int) derives Schema
+  case class BarResult(x: Int) derives Schema
   final case class FooError(x: Int) extends Throwable derives Schema
   final case class BarError(y: String) extends Throwable derives Schema
 
@@ -44,10 +44,10 @@ class ApiDerivationSpec() extends APISuite {
 
     @errors[BarError]
     @hints(Documentation("Bar"))
-    def bar(@hints(JsonName("X")) x: Int, y: String): Future[Bar] = {
+    def bar(@hints(JsonName("X")) x: Int, y: String): Future[BarResult] = {
       if (x == 0) Future.failed(BarError("X was 0"))
       else if (x == -1) Future.failed(Boom)
-      else Future.successful(Bar(x + y.size))
+      else Future.successful(BarResult(x + y.size))
     }
 
     /** baz
@@ -66,51 +66,18 @@ class ApiDerivationSpec() extends APISuite {
                            |
                            |namespace smithy4s.deriving.apiDerivationSpec
                            |
+                           |use smithy4s.deriving.apiDerivationSpec.foo#bar
+                           |use smithy4s.deriving.apiDerivationSpec.foo#baz
+                           |
                            |/// Foo
                            |service Foo {
                            |  operations: [
-                           |    Foo_bar
-                           |    Foo_baz
+                           |    bar
+                           |    baz
                            |  ]
                            |}
                            |
-                           |/// Bar
-                           |operation Foo_bar {
-                           |  input := {
-                           |    @jsonName("X")
-                           |    @required
-                           |    x: Integer
-                           |    @required
-                           |    y: String
-                           |  }
-                           |  output: Bar
-                           |  errors: [
-                           |      BarError
-                           |      FooError
-                           |  ]
-                           |}
-                           |
-                           |
-                           |/// baz
-                           |operation Foo_baz {
-                           |  input := {
-                           |    ///   the x
-                           |    @required
-                           |    x: Integer
-                           |  }
-                           |  output :=
-                           |    ///   an x
-                           |    {
-                           |       @httpPayload
-                           |       @required
-                           |       value: Integer
-                           |    }
-                           |  errors: [
-                           |      FooError
-                           |  ]
-                           |}
-                           |
-                           |structure Bar {
+                           |structure BarResult {
                            |  @required
                            |  x: Integer
                            |}
@@ -128,7 +95,52 @@ class ApiDerivationSpec() extends APISuite {
                            |}
                            |""".stripMargin
 
-    checkAPI[Foo](expectedModel)
+    val expectedModel2 = """|$version: "2"
+                            |
+                            |namespace smithy4s.deriving.apiDerivationSpec.foo
+                            |
+                            |use smithy4s.deriving.apiDerivationSpec#BarResult
+                            |use smithy4s.deriving.apiDerivationSpec#FooError
+                            |use smithy4s.deriving.apiDerivationSpec#BarError
+                            |
+                            |/// Bar
+                            |operation bar {
+                            |  input := {
+                            |    @jsonName("X")
+                            |    @required
+                            |    x: Integer
+                            |    @required
+                            |    y: String
+                            |  }
+                            |  output: BarResult
+                            |  errors: [
+                            |      BarError
+                            |      FooError
+                            |  ]
+                            |}
+                            |
+                            |
+                            |/// baz
+                            |operation baz {
+                            |  input := {
+                            |    ///   the x
+                            |    @required
+                            |    x: Integer
+                            |  }
+                            |  output :=
+                            |    ///   an x
+                            |    {
+                            |       @httpPayload
+                            |       @required
+                            |       value: Integer
+                            |    }
+                            |  errors: [
+                            |      FooError
+                            |  ]
+                            |}
+                            |""".stripMargin
+
+    checkAPI[Foo](expectedModel, expectedModel2)
 
     checkDynamic[Foo](new Foo()) { foo =>
       val result = Await.result(foo.baz(1), 1.second)
@@ -137,7 +149,7 @@ class ApiDerivationSpec() extends APISuite {
 
     checkDynamic[Foo](new Foo()) { foo =>
       val result = Await.result(foo.bar(2, "four"), 1.second)
-      assertEquals(result, Bar(6))
+      assertEquals(result, BarResult(6))
     }
 
     checkDynamic[Foo](new Foo()) { foo =>

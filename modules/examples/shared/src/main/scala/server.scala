@@ -25,9 +25,7 @@ import org.http4s.syntax.all._
 import smithy4s.http4s.SimpleRestJsonBuilder
 
 import scala.annotation.experimental
-import org.http4s.ember.client.EmberClientBuilder
 import scala.language.implicitConversions
-import smithy4s.deriving.API
 
 @experimental
 object server extends IOApp.Simple {

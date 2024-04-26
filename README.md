@@ -13,13 +13,13 @@ Scala 3.4.1 or newer is required.
 SBT :
 
 ```
-"com.neandertech" %% "smithy4s-deriving" % <version>
+"tech.neander" %% "smithy4s-deriving" % <version>
 ```
 
 The rest of the world :
 
 ```
-"com.neandertech::smithy4s-deriving:<version>"
+"tech.neander::smithy4s-deriving:<version>"
 ```
 
 You'll typically need the following imports to use the derivation :
@@ -28,7 +28,7 @@ You'll typically need the following imports to use the derivation :
 import smithy4s.*
 import smithy4s.deriving.{given, *}
 import smithy.api.* // if you want to use hints from the official smithy standard library
-import alloy.* // if you want to use hints from the alloy library
+import alloy.* // if you want to use hints from the alloy librgitary
 import scala.annotations.experimental // the derivation of API uses experimental metaprogramming features, at this time.
 ```
 
@@ -135,9 +135,9 @@ namespace example
 use example.foo#Bar
 
 union Foo {
-  @JsonName("baz")
+  @jsonName("baz")
   Bar: Bar
-  @JsonName("bar")
+  @jsonName("bar")
   Baz: String
 }
 ```

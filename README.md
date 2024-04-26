@@ -240,7 +240,7 @@ structure Crash {
 
 and
 
-```
+```smithy
 $version: "2"
 
 namespace example.foo

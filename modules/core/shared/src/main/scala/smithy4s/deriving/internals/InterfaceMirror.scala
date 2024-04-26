@@ -25,6 +25,8 @@ import scala.annotation.implicitNotFound
 open class MetaAnnotation extends scala.annotation.RefiningAnnotation
 open class ErrorAnnotation[E] extends MetaAnnotation
 
+// formatting config needs refining to work nicely with macros
+// format: off
 @implicitNotFound("No OpsMirror could be generated.\nDiagnose any issues by calling OpsMirror.reify[T] directly")
 sealed trait InterfaceMirror:
   type Annotations <: Tuple

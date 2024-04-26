@@ -34,6 +34,9 @@ import smithy4s.schema.EnumTag
 import smithy4s.Document
 import scala.util.control.NonFatal
 
+// formatting config needs refining to work nicely with macros
+// format: off
+
 def derivedSchemaImpl[T: Type](using q: Quotes): Expr[Schema[T]] = {
   import quotes.reflect.*
 

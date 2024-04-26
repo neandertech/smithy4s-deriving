@@ -23,8 +23,7 @@ private[deriving] case class Docs(main: String, params: Map[String, String], out
 private[deriving] object Docs {
 
   def parse(str: String): Docs = {
-    str
-      .linesIterator
+    str.linesIterator
       .map(_.trim)
       .foldLeft(State.start) {
         case (state, s"/**$line*/") => state.addLine(line.trim).conclude

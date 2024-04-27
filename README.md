@@ -6,6 +6,11 @@ If `smithy4s` is a tool that promotes a spec-first approach to API design, provi
 
 `smithy4s-deriving` provides a code-first alternative way to code-generation to interact with these interpreters, by using handcrafted data-types and interfaces written directly in Scala as the source of truth, thus giving access to a large number of features provided by Smithy4s, with a lower barrier of entry. In particular, this enables usage in scala-cli projects.
 
+This project takes some inspiration from :
+
+* Jamie Thompson's https://github.com/bishabosha/ops-mirror
+* Jakub Kozlowski's https://github.com/polyvariant/respectfully/
+
 ## Installation
 
 Scala 3.4.1 or newer is required.
@@ -28,7 +33,7 @@ You'll typically need the following imports to use the derivation :
 import smithy4s.*
 import smithy4s.deriving.{given, *}
 import smithy.api.* // if you want to use hints from the official smithy standard library
-import alloy.* // if you want to use hints from the alloy librgitary
+import alloy.* // if you want to use hints from the alloy library
 import scala.annotations.experimental // the derivation of API uses experimental metaprogramming features, at this time.
 ```
 

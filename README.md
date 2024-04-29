@@ -221,7 +221,7 @@ $version: "2"
 namespace example
 
 use alloy#simpleRestJson
-use example.foo#hello
+use example.helloWorldService#hello
 
 @simpleRestJson
 service Foo {
@@ -248,7 +248,7 @@ and
 ```smithy
 $version: "2"
 
-namespace example.foo
+namespace example.helloWorldService
 
 use example#Bounce
 use example#Crash

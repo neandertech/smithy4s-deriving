@@ -34,6 +34,19 @@ lazy val core = crossProject(JVMPlatform, JSPlatform)
     )
   )
 
+lazy val compiler = project
+  .in(file("modules/compiler"))
+  .dependsOn(core.jvm)
+  .settings(
+    name := "smithy4s-deriving-compiler",
+    libraryDependencies ++= Seq(
+      "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
+      "io.github.classgraph" % "classgraph" % "4.8.172",
+      "com.disneystreaming.smithy4s" %% "smithy4s-dynamic" % smithy4sVersion,
+      "com.disneystreaming.alloy" % "alloy-core" % alloyVersion
+    )
+  )
+
 lazy val tests = crossProject(JVMPlatform)
   .in(file("modules/tests"))
   .enablePlugins(NoPublishPlugin)
@@ -63,5 +76,11 @@ lazy val examples = crossProject(JVMPlatform, JSPlatform)
   .jvmSettings(
     libraryDependencies ++= Seq(
       "software.amazon.smithy" % "smithy-model" % smithyVersion
-    )
+    ),
+    autoCompilerPlugins := true,
+    Compile / fork := true,
+    Compile / scalacOptions += {
+      val pluginClasspath = (compiler / Compile / fullClasspathAsJars).value.map(_.data.getAbsolutePath()).mkString(":")
+      s"""-Xplugin:$pluginClasspath"""
+    }
   )

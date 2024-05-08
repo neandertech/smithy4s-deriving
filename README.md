@@ -34,7 +34,7 @@ import smithy4s.*
 import smithy4s.deriving.{given, *}
 import smithy.api.* // if you want to use hints from the official smithy standard library
 import alloy.* // if you want to use hints from the alloy library
-import scala.annotations.experimental // the derivation of API uses experimental metaprogramming features, at this time.
+import scala.annotation.experimental // the derivation of API uses experimental metaprogramming features, at this time.
 ```
 
 
@@ -168,7 +168,7 @@ structure Bar {
 ```scala
 import smithy4s.*
 import smithy4s.deriving.{given, *}
-import scala.annotations.experimental
+import scala.annotation.experimental
 
 @experimental
 trait HelloWorldService derives API {
@@ -192,7 +192,7 @@ import smithy4s.*
 import smithy4s.deriving.{given, *}
 import smithy.api.*
 import alloy.*
-import scala.annotations.experimental
+import scala.annotation.experimental
 
 @hints(HttpError(403))
 case class Bounce(message: String) extends Throwable derives Schema

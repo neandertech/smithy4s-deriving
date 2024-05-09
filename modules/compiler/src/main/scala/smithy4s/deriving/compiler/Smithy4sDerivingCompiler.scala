@@ -12,6 +12,7 @@ import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.shapes.ModelSerializer
 import java.net.URLClassLoader
 import scala.util.control.NonFatal
+import dotty.tools.dotc.CompilationUnit
 
 class Smithy4sDerivingCompiler extends StandardPlugin {
   val name: String = "smithy4s-deriving-compiler"
@@ -23,7 +24,11 @@ class Smithy4sDerivingCompiler extends StandardPlugin {
 class Smithy4sDerivingCompilerPhase() extends PluginPhase {
   override def phaseName: String = Smithy4sDerivingCompilerPhase.name
   override val runsAfter = Set(GenBCode.name)
-  override def run(using context: Context): Unit = {
+  // Overriding `runOn` instead of `run` because the latter is run per compilation unit (files)
+  override def runOn(units: List[CompilationUnit])(using context: Context): List[CompilationUnit] = {
+
+    val result = super.runOn(units)
+
     val compileClasspath = context.settings.classpath.value
     val output = context.settings.outputDir.value.jpath
     val urls = compileClasspath.split(":").map(new java.io.File(_).toURI().toURL())
@@ -93,6 +98,7 @@ class Smithy4sDerivingCompilerPhase() extends PluginPhase {
     } finally {
       scanResult.close()
     }
+    result
   }
 }
 

@@ -13,6 +13,7 @@ import software.amazon.smithy.model.shapes.ModelSerializer
 import java.net.URLClassLoader
 import scala.util.control.NonFatal
 import dotty.tools.dotc.CompilationUnit
+import io.github.classgraph.ClassRefTypeSignature
 
 class Smithy4sDerivingCompiler extends StandardPlugin {
   val name: String = "smithy4s-deriving-compiler"
@@ -41,6 +42,8 @@ class Smithy4sDerivingCompilerPhase() extends PluginPhase {
       .scan()
 
     try {
+      val apiClassInfo = scanResult.getClassInfo("smithy4s.deriving.API")
+
       val builder = scanResult
         .getClassesImplementing("smithy4s.deriving.API")
         .filter(info => !info.isAbstract())
@@ -61,9 +64,10 @@ class Smithy4sDerivingCompilerPhase() extends PluginPhase {
                 .asScala
                 .find { methodInfo =>
                   val sig = methodInfo.getTypeSignature()
-                  methodInfo.getParameterInfo().isEmpty &&
+                  methodInfo.getParameterInfo().isEmpty && // looking for parameterless methods
                   sig != null &&
-                  sig.getResultType().toString().startsWith("smithy4s.deriving.API")
+                  sig.getResultType().isInstanceOf[ClassRefTypeSignature] &&
+                  sig.getResultType().asInstanceOf[ClassRefTypeSignature].getClassInfo() == apiClassInfo
                 }
 
               val companionConstructor = outer.getConstructorInfo().get(0).loadClassAndGetConstructor()

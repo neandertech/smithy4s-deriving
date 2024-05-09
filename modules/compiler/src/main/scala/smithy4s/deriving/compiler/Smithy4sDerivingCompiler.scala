@@ -14,6 +14,8 @@ import java.net.URLClassLoader
 import scala.util.control.NonFatal
 import dotty.tools.dotc.CompilationUnit
 import io.github.classgraph.ClassRefTypeSignature
+import software.amazon.smithy.model.validation.ValidationEvent
+import software.amazon.smithy.model.validation.Severity
 
 class Smithy4sDerivingCompiler extends StandardPlugin {
   val name: String = "smithy4s-deriving-compiler"
@@ -96,14 +98,35 @@ class Smithy4sDerivingCompilerPhase() extends PluginPhase {
         .assemble()
         .getValidationEvents()
         .asScala
-      events.foreach { validationEvent =>
-        report.warning(validationEvent.toString())
-      }
+      events.foreach(reportEvent)
     } finally {
       scanResult.close()
     }
     result
   }
+
+  private def reportEvent(event: ValidationEvent)(using Context): Unit = {
+    var message = event.getMessage()
+
+    val reason = event.getSuppressionReason().orElse(null)
+    if (reason != null) { message += " (" + reason + ")" }
+    val hint = event.getHint().orElse(null);
+    if (hint != null) { message += " [" + hint + "]" }
+
+    val formatted = String.format(
+      "%s: %s | %s",
+      event.getShapeId().map(_.toString).orElse("-"),
+      message,
+      event.getId()
+    );
+    event.getSeverity() match
+      case Severity.SUPPRESSED => report.inform(formatted)
+      case Severity.NOTE       => report.inform(formatted)
+      case Severity.WARNING    => report.warning(formatted)
+      case Severity.DANGER     => report.error(formatted)
+      case Severity.ERROR      => report.error(formatted)
+  }
+
 }
 
 object Smithy4sDerivingCompilerPhase {

@@ -71,11 +71,6 @@ lazy val examples = crossProject(JVMPlatform, JSPlatform)
       "com.disneystreaming.smithy4s" %% "smithy4s-dynamic" % smithy4sVersion,
       "org.http4s" %% "http4s-ember-client" % "0.23.26",
       "org.http4s" %% "http4s-ember-server" % "0.23.26"
-    )
-  )
-  .jvmSettings(
-    libraryDependencies ++= Seq(
-      "software.amazon.smithy" % "smithy-model" % smithyVersion
     ),
     autoCompilerPlugins := true,
     Compile / fork := true,
@@ -83,4 +78,9 @@ lazy val examples = crossProject(JVMPlatform, JSPlatform)
       val pluginClasspath = (compiler / Compile / fullClasspathAsJars).value.map(_.data.getAbsolutePath()).mkString(":")
       s"""-Xplugin:$pluginClasspath"""
     }
+  )
+  .jvmSettings(
+    libraryDependencies ++= Seq(
+      "software.amazon.smithy" % "smithy-model" % smithyVersion
+    )
   )

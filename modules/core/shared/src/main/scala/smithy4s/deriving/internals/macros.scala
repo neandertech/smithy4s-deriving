@@ -135,9 +135,12 @@ def derivedAPIImpl[T: Type, F[_]: Type](
   val tpe = TypeRepr.of[T]
   val cls = tpe.classSymbol
   val serviceDocs: Option[String] = cls.flatMap(_.docstring).map(Docs.parse).map(_.main)
-  val serviceHints = maybeAddDocs(hintsForType[T], serviceDocs)
+  val serviceHints = maybeAddDocs(hintsForType[T], serviceDocs).maybeAddPos(cls)
   val methodDocs = cls.toList.flatMap(_.declarations.flatMap {
     sym => sym.docstring.map(docs => sym.name -> Docs.parse(docs))
+  }).toMap
+  val methodSymbols = cls.toList.flatMap(_.declarations.map {
+    sym => sym.name -> sym
   }).toMap
 
   mirror match {
@@ -151,7 +154,7 @@ def derivedAPIImpl[T: Type, F[_]: Type](
         } =>
       val serviceNamespace = stringFromSingleton[ns]
       val serviceName = stringFromSingleton[label]
-      val opSchemas = operationSchemasExpression[operations, operationLabels, F](serviceNamespace, serviceName, methodDocs)
+      val opSchemas = operationSchemasExpression[operations, operationLabels, F](serviceNamespace, serviceName, methodDocs, methodSymbols)
       '{
         new DynamicAPI[T] {
           type Effect[I, E, O, SI, SO] = F[O]
@@ -349,6 +352,27 @@ private def maybeAddDocs(expr: Expr[Hints], docs: Option[String], member: Boolea
   }
 }
 
+extension(expr: Expr[Hints]){
+  private[internals] def maybeAddPos(using Quotes)(symbol: Option[quotes.reflect.Symbol]) : Expr[Hints] = {
+    symbol.flatMap(_.pos) match {
+      case None => expr
+      case Some(pos) =>
+        val sourceLoc = '{
+          SourcePosition(
+            path = ${Expr(pos.sourceFile.path)},
+            start = ${Expr(pos.start)},
+            startLine = ${Expr(pos.startLine)},
+            startColumn = ${Expr(pos.startColumn)},
+            end = ${Expr(pos.end)},
+            endLine = ${Expr(pos.endLine)},
+            endColumn = ${Expr(pos.endColumn)}
+          ) : Hints.Binding
+        }
+        '{$expr.add($sourceLoc)}
+    }
+  }
+}
+
 private def fieldHintsMap[T: Type](docs: Map[String, String])(using
     Quotes
 ): Map[String, Expr[Hints]] = {
@@ -375,11 +399,12 @@ private def fieldHintsMap[T: Type](docs: Map[String, String])(using
     .toMap
 }
 
-private def operationSchemasExpression[Ts: Type, OpLabels: Type, F[_]: Type](
+private def operationSchemasExpression[Ts: Type, OpLabels: Type, F[_]: Type](using Quotes)(
     serviceNamespace: String,
     serviceName: String,
-    methodDocs: Map[String, Docs]
-)(using Quotes): Expr[List[OperationSchema[?, ?, ?, ?, ?]]] = {
+    methodDocs: Map[String, Docs],
+    methodSymbols: Map[String, quotes.reflect.Symbol]
+): Expr[List[OperationSchema[?, ?, ?, ?, ?]]] = {
   val expressionList = typesFromTuple[Ts]
     .zip(stringsFromTupleOfSingletons[OpLabels])
     .map { case ('[op], opName) =>
@@ -397,7 +422,8 @@ private def operationSchemasExpression[Ts: Type, OpLabels: Type, F[_]: Type](
           val opAnnotations = extractAnnotationFromType[annotations]
           val opDocs = methodDocs.get(opName).map(_.main)
           val outputDocs = Expr(methodDocs.get(opName).flatMap(_.output))
-          val opHints = maybeAddDocs(operationHints(opAnnotations), opDocs)
+          val methodSymbol = methodSymbols.get(opName)
+          val opHints = maybeAddDocs(operationHints(opAnnotations), opDocs).maybeAddPos(methodSymbol)
           val paramDocs = methodDocs.get(opName).map(_.params).getOrElse(Map.empty)
           val paramAnnotations = extractAnnotationsFromTuple[inputAnnotations]
           val fieldHints = paramHintsMap(paramAnnotations, labels, paramDocs)

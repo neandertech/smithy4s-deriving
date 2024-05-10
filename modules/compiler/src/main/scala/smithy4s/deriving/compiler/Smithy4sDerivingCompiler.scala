@@ -1,21 +1,30 @@
 package smithy4s.deriving.compiler
 
+import dotty.tools.backend.jvm.GenBCode
+import dotty.tools.dotc.CompilationUnit
 import dotty.tools.dotc.core.Contexts.Context
-import dotty.tools.dotc.report
 import dotty.tools.dotc.plugins.PluginPhase
 import dotty.tools.dotc.plugins.StandardPlugin
-import dotty.tools.backend.jvm.GenBCode
-import scala.jdk.CollectionConverters._
+import dotty.tools.dotc.report
+import dotty.tools.dotc.util.NoSourcePosition
+import dotty.tools.dotc.util.Spans
 import io.github.classgraph.ClassGraph
+import io.github.classgraph.ClassRefTypeSignature
+import smithy4s.Document
+import smithy4s.deriving.internals.SourcePosition
 import smithy4s.dynamic.DynamicSchemaIndex
+import smithy4s.dynamic.NodeToDocument
 import software.amazon.smithy.model.Model
 import software.amazon.smithy.model.shapes.ModelSerializer
-import java.net.URLClassLoader
-import scala.util.control.NonFatal
-import dotty.tools.dotc.CompilationUnit
-import io.github.classgraph.ClassRefTypeSignature
-import software.amazon.smithy.model.validation.ValidationEvent
+import software.amazon.smithy.model.shapes.ShapeId as SmithyShapeId
 import software.amazon.smithy.model.validation.Severity
+import software.amazon.smithy.model.validation.ValidationEvent
+
+import java.net.URLClassLoader
+import java.util.Optional
+import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
+import scala.util.control.NonFatal
 
 class Smithy4sDerivingCompiler extends StandardPlugin {
   val name: String = "smithy4s-deriving-compiler"
@@ -91,21 +100,21 @@ class Smithy4sDerivingCompilerPhase() extends PluginPhase {
 
       val unvalidatedModel = builder.build().toSmithyModel
       val node = ModelSerializer.builder().build().serialize(unvalidatedModel)
-      val events = Model
+      val assemblyResult = Model
         .assembler(this.getClass().getClassLoader())
         .discoverModels(this.getClass().getClassLoader())
         .addDocumentNode(node)
         .assemble()
-        .getValidationEvents()
-        .asScala
-      events.foreach(reportEvent)
+
+      val events = assemblyResult.getValidationEvents().asScala
+      events.foreach(reportEvent(unvalidatedModel))
     } finally {
       scanResult.close()
     }
     result
   }
 
-  private def reportEvent(event: ValidationEvent)(using Context): Unit = {
+  private def reportEvent(model: Model)(event: ValidationEvent)(using context: Context): Unit = {
     var message = event.getMessage()
 
     val reason = event.getSuppressionReason().orElse(null)
@@ -118,13 +127,33 @@ class Smithy4sDerivingCompilerPhase() extends PluginPhase {
       event.getShapeId().map(_.toString).orElse("-"),
       message,
       event.getId()
-    );
+    )
+
+    val SourcePositionId = SmithyShapeId.fromParts(SourcePosition.id.namespace, SourcePosition.id.name)
+    val sourcePositionDecoder = Document.Decoder.fromSchema(SourcePosition.schema)
+
+    val maybeSourcePos = event
+      .getShapeId()
+      .flatMap(model.getShape)
+      .flatMap(sourcePos => Optional.ofNullable(sourcePos.getAllTraits().get(SourcePositionId)))
+      .map(_.toNode())
+      .map(NodeToDocument(_))
+      .flatMap(sourcePositionDecoder.decode(_).toOption.toJava)
+      .toScala
+
+    val scalaPosition = maybeSourcePos match {
+      case None => NoSourcePosition
+      case Some(pos) =>
+        val sourceFile = context.getSource(pos.path)
+        dotty.tools.dotc.util.SourcePosition(sourceFile, Spans.Span(pos.start, pos.end))
+    }
+
     event.getSeverity() match
-      case Severity.SUPPRESSED => report.inform(formatted)
-      case Severity.NOTE       => report.inform(formatted)
-      case Severity.WARNING    => report.warning(formatted)
-      case Severity.DANGER     => report.error(formatted)
-      case Severity.ERROR      => report.error(formatted)
+      case Severity.SUPPRESSED => report.inform(formatted, scalaPosition)
+      case Severity.NOTE       => report.inform(formatted, scalaPosition)
+      case Severity.WARNING    => report.warning(formatted, scalaPosition)
+      case Severity.DANGER     => report.error(formatted, scalaPosition)
+      case Severity.ERROR      => report.error(formatted, scalaPosition)
   }
 
 }

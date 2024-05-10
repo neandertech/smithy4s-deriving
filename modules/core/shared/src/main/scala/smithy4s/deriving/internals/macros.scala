@@ -44,7 +44,8 @@ def derivedSchemaImpl[T: Type](using q: Quotes): Expr[Schema[T]] = {
     report.errorAndAbort(s"Could not find a suitable Mirror")
   }
 
-  val docs = TypeRepr.of[T].classSymbol.flatMap(_.docstring).map(Docs.parse)
+  val cls = TypeRepr.of[T].classSymbol
+  val docs = cls.flatMap(_.docstring).map(Docs.parse)
   val ns = Expr(getNamespace[T])
   ev match
     case '{
@@ -58,11 +59,13 @@ def derivedSchemaImpl[T: Type](using q: Quotes): Expr[Schema[T]] = {
       val name = stringFromSingleton[name]
       val elemSchemas = summonSchemas[T, elementTypes]
       val labels = stringsFromTupleOfSingletons[elementLabels]
-      val structHints = hintsForType[T].maybeAddDocs(docs.map(_.main))
+      val structHints = hintsForType[T].maybeAddDocs(docs.map(_.main)).maybeAddPos(cls)
       val fieldDocs = docs.map(_.params).getOrElse(Map.empty)
       val fieldHints = fieldHintsMap[T](fieldDocs)
+      val fieldSymbols = fieldSymbolsMap[T]
+      val fieldHintsWithPos = fieldHints.map { case (k, v) => k -> v.maybeAddPos(fieldSymbols.get(k))}
       val defaults = defaultValues[T]
-      val fieldsExpr = fieldsExpression(elemSchemas, labels, fieldHints, defaults)
+      val fieldsExpr = fieldsExpression(elemSchemas, labels, fieldHintsWithPos, defaults)
 
       if (isSmithyWrapper[T]){
         val smithyWrapper = TypeRepr.of[wrapper].typeSymbol.name
@@ -103,7 +106,7 @@ def derivedSchemaImpl[T: Type](using q: Quotes): Expr[Schema[T]] = {
           }
         } =>
       val maybeEnumSchemaExpr = enumSchemaExpression[T, elementTypes]
-      val shapeHints = hintsForType[T].maybeAddDocs(docs.map(_.main))
+      val shapeHints = hintsForType[T].maybeAddDocs(docs.map(_.main)).maybeAddPos(cls)
       val name = stringFromSingleton[name]
       maybeEnumSchemaExpr match {
         case Some(enumSchemaExpr) =>
@@ -254,12 +257,12 @@ private def extractAnnotationFromType[Annotations: Type](using Quotes): List[Exp
         report.errorAndAbort(s"got the annotations element ${tpe.show}")
 }
 
-private def fieldsExpression[T: Type](
+private def fieldsExpression[T: Type](using Quotes)(
     schemaInstances: List[Expr[Schema[?]]],
     labels: List[String],
     hintsMap: Map[String, Expr[Hints]],
     defaultValues: Map[String, Expr[Any]]
-)(using Quotes): Expr[Seq[smithy4s.schema.Field[T, ?]]] =
+): Expr[Seq[smithy4s.schema.Field[T, ?]]] =
   Expr.ofSeq(schemaInstances.zipWithIndex.zip(labels).map { case (('{ $elem: Schema[t] }, index), label) =>
     val indexExpr = Expr(index)
     val labelExpr = Expr(label)
@@ -299,7 +302,7 @@ private def altsExpression[T: Type](
       { case (t: tt) => t }
     }
     val alt = '{
-      $elem.oneOf[T]($labelExpr, $inject)($project): smithy4s.schema.Alt[T, ?]
+      copyPositionToMember($elem).oneOf[T]($labelExpr, $inject)($project): smithy4s.schema.Alt[T, ?]
     }
     alt
   })
@@ -401,6 +404,18 @@ private def fieldHintsMap[T: Type](docs: Map[String, String])(using
       val hintsExpr = Expr.ofSeq(hintsExprs)
       sym.name -> '{ $hintsExpr.map(_.hints).fold(Hints.empty)(_ ++ _) }.maybeAddDocs(docs.get(sym.name), member = true)
     }
+    .toMap
+}
+
+private def fieldSymbolsMap[T: Type](using Quotes) : Map[String, quotes.reflect.Symbol] = {
+  import quotes.reflect.*
+  TypeRepr
+    .of[T]
+    .typeSymbol
+    .primaryConstructor
+    .paramSymss
+    .flatten
+    .map { sym => sym.name -> sym }
     .toMap
 }
 
@@ -612,11 +627,12 @@ private def enumValueExpression[Enum: Type](memberType: Type[?], index: Int)(usi
       val ev: Expr[Mirror.Of[mt]] = Expr.summon[Mirror.Of[mt]].getOrElse {
         report.errorAndAbort(s"Could not find a suitable Mirror for ${TypeRepr.of[mt].show}")
       }
-      val docs = TypeRepr.of[mt].termSymbol.docstring.map(Docs.parse)
+      val termSymbol = TypeRepr.of[mt].termSymbol
+      val docs = termSymbol.docstring.map(Docs.parse)
 
       ev match {
         case '{$mirror: Mirror.Singleton {type MirroredLabel = label}} => Some{
-          val hintsExpr = hintsFor(TypeRepr.of[mt].termSymbol).maybeAddDocs(docs.map(_.main))
+          val hintsExpr = hintsFor(TypeRepr.of[mt].termSymbol).maybeAddDocs(docs.map(_.main)).maybeAddPos(Some(termSymbol), member = true)
           val labelExpr = Expr(stringFromSingleton[label])
           val indexExpr = Expr(index)
           '{

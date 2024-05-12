@@ -34,6 +34,7 @@ class Smithy4sDerivingCompiler extends StandardPlugin {
 }
 
 class Smithy4sDerivingCompilerPhase() extends PluginPhase {
+
   override def phaseName: String = Smithy4sDerivingCompilerPhase.name
   override val runsAfter = Set(GenBCode.name)
   // Overriding `runOn` instead of `run` because the latter is run per compilation unit (files)

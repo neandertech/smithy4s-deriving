@@ -18,13 +18,15 @@ Scala 3.4.1 or newer is required.
 SBT :
 
 ```
-"tech.neander" %% "smithy4s-deriving" % <version>
+libraryDependencies += "tech.neander" %% "smithy4s-deriving" % <version>
+addCompilerPlugin("tech.neander" %% "smithy4s-deriving-compiler" % <version>)
 ```
 
-The rest of the world :
+scala-cli :
 
 ```
-"tech.neander::smithy4s-deriving:<version>"
+//> using dep "tech.neander::smithy4s-deriving:<version>"
+//> using plugin "tech.neander::smithy4s-deriving-compiler:<version>"
 ```
 
 You'll typically need the following imports to use the derivation :
@@ -348,9 +350,15 @@ val instance = new Foo {
 }
 ```
 
+### Compile time validation
+
+The `smithy4s-deriving-compiler` permits the validation of API/Schema usage within the compilation cycle. At the time of writing this, the plugin works by looking up derived `API` instances and crawling through the schemas from there, which implies that standalone `Schema` instances that are not (transitively) tied to `API` instances are not validated at compile time.
+
+
+
 ### Re-creating a smithy-model from the derived constructs (JVM only)
 
-It is unfortunately impossible for `smithy4s-deriving` to validate, at compile time, the correct usage of the application of `@hints`. However, it is possible to automatically recreate a smithy model from the derived abstractions, and to run the smithy validators. One could use this in a unit test, for instance, to verify the correctness of their services according to the rules of smithy.
+It is possible to automatically recreate a smithy model from the derived abstractions, and to run the smithy validators. One could use this in a unit test, for instance, to verify the correctness of their services according to the rules of smithy.
 
 See an example of how to do that [here](./modules/examples/jvm/src/main/scala/printSpecs.scala).
 

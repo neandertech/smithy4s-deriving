@@ -309,10 +309,9 @@ private def altsExpression[T: Type](
 
 private def operationHints(annotations: List[Expr[Any]])(using Quotes): Expr[Hints] =
   annotations
-    .collectFirst { case '{ $smithyAnnotation: HintsProvider } =>
-      '{ $smithyAnnotation.hints }
-    }
-    .getOrElse('{ Hints.empty })
+    .collect { case '{ $smithyAnnotation: HintsProvider } => '{ $smithyAnnotation.hints }}
+    .fold('{Hints.empty}){ case (left, right) => '{$left ++ $right}}
+
 
 private def paramHintsMap(using Quotes)
   (annotations: List[List[Expr[Any]]], labels: List[String], paramDocs: Map[String, String], paramSymbols: List[quotes.reflect.Symbol]): Map[String, Expr[Hints]] = {

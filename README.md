@@ -34,9 +34,11 @@ You'll typically need the following imports to use the derivation :
 ```scala
 import smithy4s.*
 import smithy4s.deriving.{given, *}
+import smithy4s.deriving.aliases.* // for syntactically pleasant annotations
+import scala.annotation.experimental // the derivation of API uses experimental metaprogramming features, at this time.
+
 import smithy.api.* // if you want to use hints from the official smithy standard library
 import alloy.* // if you want to use hints from the alloy library
-import scala.annotation.experimental // the derivation of API uses experimental metaprogramming features, at this time.
 ```
 
 
@@ -281,6 +283,21 @@ operation hello {
 * Defaults are supported
 * Scaladoc is converted to `@documentation` hints
 
+## More concise annotations
+
+To reduce the verbosity induced by the `hints` annotation, it is possible to define custom annotations that create the responsibility of
+creating hints, as such :
+
+```scala
+import smithy4s.Hints
+import smithy4s.deriving.HintsProvider
+
+case class httpGet(uri: String, status: Int) extends HintsProvider {
+  def hints = Hints(Http(NonEmptyString("GET"), NonEmptyString(uri), status))
+}
+```
+
+A few of these more-concise annotations are provided out-of-the-box in the `smithy4s.deriving.aliases` package.
 
 ## Difference between smithy4s.deriving.API and and smithy4s.Service
 

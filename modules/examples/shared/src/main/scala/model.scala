@@ -18,30 +18,25 @@ package examples
 
 import smithy4s.*
 import smithy4s.deriving.{given, *}
-import smithy.api.*
-import alloy.*
+import smithy4s.deriving.aliases.*
 import cats.effect.IO
 import scala.annotation.experimental
 
-// Just making it simpler to construct hints
-given [A, B](using Bijection[A, B]): Conversion[A, B] with {
-  def apply(a: A): B = summon[Bijection[A, B]](a)
-}
-
-@hints(HttpError(503))
+@httpError(503)
 case class LocationNotRecognised(errorMessage: String) extends Throwable derives Schema {
   override def getMessage(): String = errorMessage
 }
 
 @experimental
-@hints(SimpleRestJson())
+@simpleRestJson
 class HelloWorldService() derives API {
 
   @errors[LocationNotRecognised]
-  @hints(Http(method = "GET", uri = "/hello/{name}"), Readonly())
+  @readonly
+  @httpGet("/hello/{name}")
   def hello(
-      @hints(HttpLabel()) name: String,
-      @hints(HttpQuery("from")) from: Option[String]
+      @httpLabel() name: String,
+      @httpQuery("from") from: Option[String]
   ): IO[String] = from match {
     case None                       => IO(s"Hello $name!")
     case Some(loc) if loc.isEmpty() => IO.raiseError(LocationNotRecognised("Empty location"))

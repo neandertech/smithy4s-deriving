@@ -113,3 +113,6 @@ lazy val examples = crossProject(JVMPlatform, JSPlatform)
       "software.amazon.smithy" % "smithy-model" % smithyVersion
     )
   )
+  .jsSettings(
+    Test / fork := false
+  )

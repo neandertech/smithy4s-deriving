@@ -61,13 +61,16 @@ trait SchemaSuite extends FunSuite {
   def checkSchema[A: Schema](modelStrings: String*)(using Location) = {
     val unvalidated = DynamicSchemaIndex.builder.addAll(Schema[A]).build().toSmithyModel
     val node = ModelSerializer.builder().build().serialize(unvalidated)
-    val validated = Model.assembler().addDocumentNode(node).assemble().unwrap()
+    val validated = Model.assembler().discoverModels().addDocumentNode(node).assemble().unwrap()
+    val filtered = ModelTransformer
+      .create()
+      .filterShapes(validated, _.getId().getNamespace() != "smithy4s.deriving.internals")
     val expectedAssembler = Model.assembler()
     modelStrings.zipWithIndex.foreach { case (string, index) =>
       expectedAssembler.addUnparsedModel(s"expected$index.smithy", string)
     }
     val expected = expectedAssembler.assemble().unwrap()
-    assertEquals(ModelWrapper(validated), ModelWrapper(expected))
+    assertEquals(ModelWrapper(filtered), ModelWrapper(expected))
   }
 }
 

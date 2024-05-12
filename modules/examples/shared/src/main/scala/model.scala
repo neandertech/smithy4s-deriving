@@ -38,7 +38,7 @@ case class LocationNotRecognised(errorMessage: String) extends Throwable derives
 class HelloWorldService() derives API {
 
   @errors[LocationNotRecognised]
-  @hints(Http(method = "GET", uri = "/hello/{name}"))
+  @hints(Http(method = "GET", uri = "/hello/{name}"), Readonly())
   def hello(
       @hints(HttpLabel()) name: String,
       @hints(HttpQuery("from")) from: Option[String]

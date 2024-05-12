@@ -44,13 +44,16 @@ trait APISuite extends FunSuite {
     val api = API[A]
     val unvalidated = DynamicSchemaIndex.builder.addAll(Service[api.Free]).build().toSmithyModel
     val node = ModelSerializer.builder().build().serialize(unvalidated)
-    val validated = Model.assembler().addDocumentNode(node).assemble().unwrap()
+    val validated = Model.assembler().discoverModels().addDocumentNode(node).assemble().unwrap()
+    val filtered = ModelTransformer
+      .create()
+      .filterShapes(validated, _.getId().getNamespace() != "smithy4s.deriving.internals")
     val expectedAssembler = Model.assembler()
     modelStrings.zipWithIndex.foreach { case (string, index) =>
       expectedAssembler.addUnparsedModel(s"expected$index.smithy", string)
     }
     val expected = expectedAssembler.assemble().unwrap()
-    assertEquals(ModelWrapper(validated), ModelWrapper(expected))
+    assertEquals(ModelWrapper(filtered), ModelWrapper(expected))
   }
 }
 
@@ -58,13 +61,16 @@ trait SchemaSuite extends FunSuite {
   def checkSchema[A: Schema](modelStrings: String*)(using Location) = {
     val unvalidated = DynamicSchemaIndex.builder.addAll(Schema[A]).build().toSmithyModel
     val node = ModelSerializer.builder().build().serialize(unvalidated)
-    val validated = Model.assembler().addDocumentNode(node).assemble().unwrap()
+    val validated = Model.assembler().discoverModels().addDocumentNode(node).assemble().unwrap()
+    val filtered = ModelTransformer
+      .create()
+      .filterShapes(validated, _.getId().getNamespace() != "smithy4s.deriving.internals")
     val expectedAssembler = Model.assembler()
     modelStrings.zipWithIndex.foreach { case (string, index) =>
       expectedAssembler.addUnparsedModel(s"expected$index.smithy", string)
     }
     val expected = expectedAssembler.assemble().unwrap()
-    assertEquals(ModelWrapper(validated), ModelWrapper(expected))
+    assertEquals(ModelWrapper(filtered), ModelWrapper(expected))
   }
 }
 
@@ -77,8 +83,8 @@ class ModelWrapper(val model: Model) {
 
   override def equals(obj: Any): Boolean = obj match {
     case wrapper: ModelWrapper =>
-      val one = reorderMetadata(reorderFields(model))
-      val two = reorderMetadata(reorderFields(wrapper.model))
+      val one = reorderMetadata(model)
+      val two = reorderMetadata(wrapper.model)
       val diff = ModelDiff
         .builder()
         .oldModel(one)
@@ -147,15 +153,6 @@ class ModelWrapper(val model: Model) {
     builder.build()
   }
 
-  private val reorderFields: Model => Model = m => {
-    val structures = m.getStructureShapes().asScala.map { structShape =>
-      val sortedMembers =
-        structShape.members().asScala.toList.sortBy(_.getMemberName())
-      structShape.toBuilder().members(sortedMembers.asJava).build()
-    }
-    m.toBuilder().addShapes(structures.asJava).build()
-  }
-
   private def update(model: Model): Model = {
     val filterSuppressions: Model => Model = m =>
       new FilterSuppressions().transform(
@@ -167,12 +164,13 @@ class ModelWrapper(val model: Model) {
           )
           .build()
       )
-    (filterSuppressions andThen reorderFields)(model)
+    (filterSuppressions)(model)
   }
 
   override def toString() =
     SmithyIdlModelSerializer
       .builder()
+      .metadataFilter(_ => false)
       .build()
       .serialize(update(model))
       .asScala

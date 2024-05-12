@@ -44,7 +44,8 @@ def derivedSchemaImpl[T: Type](using q: Quotes): Expr[Schema[T]] = {
     report.errorAndAbort(s"Could not find a suitable Mirror")
   }
 
-  val docs = TypeRepr.of[T].classSymbol.flatMap(_.docstring).map(Docs.parse)
+  val cls = TypeRepr.of[T].classSymbol
+  val docs = cls.flatMap(_.docstring).map(Docs.parse)
   val ns = Expr(getNamespace[T])
   ev match
     case '{
@@ -58,11 +59,13 @@ def derivedSchemaImpl[T: Type](using q: Quotes): Expr[Schema[T]] = {
       val name = stringFromSingleton[name]
       val elemSchemas = summonSchemas[T, elementTypes]
       val labels = stringsFromTupleOfSingletons[elementLabels]
-      val structHints = maybeAddDocs(hintsForType[T], docs.map(_.main))
+      val structHints = hintsForType[T].maybeAddDocs(docs.map(_.main)).maybeAddPos(cls)
       val fieldDocs = docs.map(_.params).getOrElse(Map.empty)
       val fieldHints = fieldHintsMap[T](fieldDocs)
+      val fieldSymbols = fieldSymbolsMap[T]
+      val fieldHintsWithPos = fieldHints.map { case (k, v) => k -> v.maybeAddPos(fieldSymbols.get(k))}
       val defaults = defaultValues[T]
-      val fieldsExpr = fieldsExpression(elemSchemas, labels, fieldHints, defaults)
+      val fieldsExpr = fieldsExpression(elemSchemas, labels, fieldHintsWithPos, defaults)
 
       if (isSmithyWrapper[T]){
         val smithyWrapper = TypeRepr.of[wrapper].typeSymbol.name
@@ -103,7 +106,7 @@ def derivedSchemaImpl[T: Type](using q: Quotes): Expr[Schema[T]] = {
           }
         } =>
       val maybeEnumSchemaExpr = enumSchemaExpression[T, elementTypes]
-      val shapeHints = maybeAddDocs(hintsForType[T], docs.map(_.main))
+      val shapeHints = hintsForType[T].maybeAddDocs(docs.map(_.main)).maybeAddPos(cls)
       val name = stringFromSingleton[name]
       maybeEnumSchemaExpr match {
         case Some(enumSchemaExpr) =>
@@ -135,7 +138,7 @@ def derivedAPIImpl[T: Type, F[_]: Type](
   val tpe = TypeRepr.of[T]
   val cls = tpe.classSymbol
   val serviceDocs: Option[String] = cls.flatMap(_.docstring).map(Docs.parse).map(_.main)
-  val serviceHints = maybeAddDocs(hintsForType[T], serviceDocs)
+  val serviceHints = hintsForType[T].maybeAddDocs(serviceDocs).maybeAddPos(cls)
   val methodDocs = cls.toList.flatMap(_.declarations.flatMap {
     sym => sym.docstring.map(docs => sym.name -> Docs.parse(docs))
   }).toMap
@@ -151,7 +154,13 @@ def derivedAPIImpl[T: Type, F[_]: Type](
         } =>
       val serviceNamespace = stringFromSingleton[ns]
       val serviceName = stringFromSingleton[label]
-      val opSchemas = operationSchemasExpression[operations, operationLabels, F](serviceNamespace, serviceName, methodDocs)
+      val methodSymbols = cls.toList.flatMap(_.declarations.map {
+        sym => sym.name -> sym
+      }).toMap
+      val methodParamSymbols = cls.toList.flatMap(_.declarations.map {
+        sym => sym.name -> sym.paramSymss.flatten // curried methods get caught by `InterfaceMirror`
+      }).toMap
+      val opSchemas = operationSchemasExpression[operations, operationLabels, F](serviceNamespace, serviceName, methodDocs, methodSymbols, methodParamSymbols)
       '{
         new DynamicAPI[T] {
           type Effect[I, E, O, SI, SO] = F[O]
@@ -248,12 +257,12 @@ private def extractAnnotationFromType[Annotations: Type](using Quotes): List[Exp
         report.errorAndAbort(s"got the annotations element ${tpe.show}")
 }
 
-private def fieldsExpression[T: Type](
+private def fieldsExpression[T: Type](using Quotes)(
     schemaInstances: List[Expr[Schema[?]]],
     labels: List[String],
     hintsMap: Map[String, Expr[Hints]],
     defaultValues: Map[String, Expr[Any]]
-)(using Quotes): Expr[Seq[smithy4s.schema.Field[T, ?]]] =
+): Expr[Seq[smithy4s.schema.Field[T, ?]]] =
   Expr.ofSeq(schemaInstances.zipWithIndex.zip(labels).map { case (('{ $elem: Schema[t] }, index), label) =>
     val indexExpr = Expr(index)
     val labelExpr = Expr(label)
@@ -293,7 +302,7 @@ private def altsExpression[T: Type](
       { case (t: tt) => t }
     }
     val alt = '{
-      $elem.oneOf[T]($labelExpr, $inject)($project): smithy4s.schema.Alt[T, ?]
+      copyPositionToMember($elem).oneOf[T]($labelExpr, $inject)($project): smithy4s.schema.Alt[T, ?]
     }
     alt
   })
@@ -305,16 +314,16 @@ private def operationHints(annotations: List[Expr[Any]])(using Quotes): Expr[Hin
     }
     .getOrElse('{ Hints.empty })
 
-private def paramHintsMap(annotations: List[List[Expr[Any]]], labels: List[String], paramDocs: Map[String, String])(using
-    Quotes
-): Map[String, Expr[Hints]] = {
+private def paramHintsMap(using Quotes)
+  (annotations: List[List[Expr[Any]]], labels: List[String], paramDocs: Map[String, String], paramSymbols: List[quotes.reflect.Symbol]): Map[String, Expr[Hints]] = {
   annotations
     .zip(labels)
-    .map { case (paramAnnotations, paramName) =>
+    .zipWithIndex
+    .map { case ((paramAnnotations, paramName), index) =>
       val hintsExpr = paramAnnotations
         .collectFirst { case '{ $smithyAnnotation: HintsProvider } => '{ $smithyAnnotation.hints } }
         .getOrElse('{ Hints.empty })
-      paramName -> maybeAddDocs(hintsExpr, paramDocs.get(paramName), member = true)
+      paramName -> hintsExpr.maybeAddDocs(paramDocs.get(paramName), member = true).maybeAddPos(Some(paramSymbols(index)), member = true)
     }
     .toMap
 }
@@ -341,11 +350,34 @@ private def errorUnionRepr[U : Type](using quotes: Quotes) : quotes.reflect.Type
   }
 }
 
-private def maybeAddDocs(expr: Expr[Hints], docs: Option[String], member: Boolean = false)(using Quotes): Expr[Hints] = {
-  docs match {
-    case Some(doc) if member => '{ $expr.addMemberHints(smithy.api.Documentation(${Expr(doc)}))}
-    case Some(doc) => '{ $expr.addTargetHints(smithy.api.Documentation(${Expr(doc)}))}
-    case None => expr
+extension(expr: Expr[Hints]){
+
+  private[internals] def maybeAddDocs(using Quotes)(docs: Option[String], member: Boolean = false): Expr[Hints] = {
+    docs match {
+      case Some(doc) if member => '{ $expr.addMemberHints(smithy.api.Documentation(${Expr(doc)}))}
+      case Some(doc) => '{ $expr.addTargetHints(smithy.api.Documentation(${Expr(doc)}))}
+      case None => expr
+    }
+  }
+
+  private[internals] def maybeAddPos(using Quotes)(symbol: Option[quotes.reflect.Symbol], member: Boolean = false) : Expr[Hints] = {
+    symbol.flatMap(_.pos) match {
+      case None => expr
+      case Some(pos) =>
+        val sourceLoc = '{
+          SourcePosition(
+            path = ${Expr(pos.sourceFile.path)},
+            start = ${Expr(pos.start)},
+            startLine = ${Expr(pos.startLine)},
+            startColumn = ${Expr(pos.startColumn)},
+            end = ${Expr(pos.end)},
+            endLine = ${Expr(pos.endLine)},
+            endColumn = ${Expr(pos.endColumn)}
+          ) : Hints.Binding
+        }
+        if (member) '{$expr.addMemberHints($sourceLoc)}
+        else '{$expr.addTargetHints($sourceLoc)}
+    }
   }
 }
 
@@ -370,16 +402,30 @@ private def fieldHintsMap[T: Type](docs: Map[String, String])(using
     .map { sym =>
       val hintsExprs = sym.annotations.flatMap(maybeSmithyAnnotation)
       val hintsExpr = Expr.ofSeq(hintsExprs)
-      sym.name -> maybeAddDocs('{ $hintsExpr.map(_.hints).fold(Hints.empty)(_ ++ _) }, docs.get(sym.name), member = true)
+      sym.name -> '{ $hintsExpr.map(_.hints).fold(Hints.empty)(_ ++ _) }.maybeAddDocs(docs.get(sym.name), member = true)
     }
     .toMap
 }
 
-private def operationSchemasExpression[Ts: Type, OpLabels: Type, F[_]: Type](
+private def fieldSymbolsMap[T: Type](using Quotes) : Map[String, quotes.reflect.Symbol] = {
+  import quotes.reflect.*
+  TypeRepr
+    .of[T]
+    .typeSymbol
+    .primaryConstructor
+    .paramSymss
+    .flatten
+    .map { sym => sym.name -> sym }
+    .toMap
+}
+
+private def operationSchemasExpression[Ts: Type, OpLabels: Type, F[_]: Type](using Quotes)(
     serviceNamespace: String,
     serviceName: String,
-    methodDocs: Map[String, Docs]
-)(using Quotes): Expr[List[OperationSchema[?, ?, ?, ?, ?]]] = {
+    methodDocs: Map[String, Docs],
+    methodSymbols: Map[String, quotes.reflect.Symbol],
+    methodParamSymbols: Map[String, List[quotes.reflect.Symbol]]
+): Expr[List[OperationSchema[?, ?, ?, ?, ?]]] = {
   val expressionList = typesFromTuple[Ts]
     .zip(stringsFromTupleOfSingletons[OpLabels])
     .map { case ('[op], opName) =>
@@ -397,10 +443,12 @@ private def operationSchemasExpression[Ts: Type, OpLabels: Type, F[_]: Type](
           val opAnnotations = extractAnnotationFromType[annotations]
           val opDocs = methodDocs.get(opName).map(_.main)
           val outputDocs = Expr(methodDocs.get(opName).flatMap(_.output))
-          val opHints = maybeAddDocs(operationHints(opAnnotations), opDocs)
+          val methodSymbol = methodSymbols.get(opName)
+          val opHints = operationHints(opAnnotations).maybeAddDocs(opDocs).maybeAddPos(methodSymbol)
           val paramDocs = methodDocs.get(opName).map(_.params).getOrElse(Map.empty)
+          val paramSymbols = methodParamSymbols.get(opName).getOrElse(List.empty)
           val paramAnnotations = extractAnnotationsFromTuple[inputAnnotations]
-          val fieldHints = paramHintsMap(paramAnnotations, labels, paramDocs)
+          val fieldHints = paramHintsMap(paramAnnotations, labels, paramDocs, paramSymbols)
           val defaults = Map.empty[String, Expr[Any]]
           val fieldsExpr = fieldsExpression[inputTypes](paramSchemas, labels, fieldHints, defaults)
           val errorSchemas = summonSchemas[errorTypes, errorTypes]
@@ -409,12 +457,13 @@ private def operationSchemasExpression[Ts: Type, OpLabels: Type, F[_]: Type](
           val nestedNs = Expr(serviceNamespace + "." + uncapitalise(serviceName))
           val opInputNameExpr = Expr(opName + "Input")
           val opOutputNameExpr = Expr(opName + "Output")
+          val inputSchemaHints = '{Hints(ShapeId("smithy.api", "input") -> Document.obj())}.maybeAddPos(methodSymbol)
           val inputSchema = '{
             val fields = $fieldsExpr.toVector
             Schema
               .struct(fields)(seq => Tuple.fromArray(seq.toArray).asInstanceOf[inputTypes])
               .withId($nestedNs, $opInputNameExpr)
-              .addHints(ShapeId("smithy.api", "input") -> Document.obj())
+              .addHints($inputSchemaHints)
           }
           val outputSchema = '{ summonInline[Schema[outputType]].compile(wrapOutputSchema(ShapeId($nestedNs, $opOutputNameExpr), $outputDocs))}
           val opSchemaWithoutError = '{
@@ -578,11 +627,12 @@ private def enumValueExpression[Enum: Type](memberType: Type[?], index: Int)(usi
       val ev: Expr[Mirror.Of[mt]] = Expr.summon[Mirror.Of[mt]].getOrElse {
         report.errorAndAbort(s"Could not find a suitable Mirror for ${TypeRepr.of[mt].show}")
       }
-      val docs = TypeRepr.of[mt].termSymbol.docstring.map(Docs.parse)
+      val termSymbol = TypeRepr.of[mt].termSymbol
+      val docs = termSymbol.docstring.map(Docs.parse)
 
       ev match {
         case '{$mirror: Mirror.Singleton {type MirroredLabel = label}} => Some{
-          val hintsExpr = maybeAddDocs(hintsFor(TypeRepr.of[mt].termSymbol), docs.map(_.main))
+          val hintsExpr = hintsFor(TypeRepr.of[mt].termSymbol).maybeAddDocs(docs.map(_.main)).maybeAddPos(Some(termSymbol), member = true)
           val labelExpr = Expr(stringFromSingleton[label])
           val indexExpr = Expr(index)
           '{

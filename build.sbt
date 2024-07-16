@@ -14,6 +14,8 @@ ThisBuild / developers ++= List(
   tlGitHubDev("baccata", "Olivier Mélois")
 )
 
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("17"))
+
 ThisBuild / scalacOptions ++= Seq(
   "-language:implicitConversions"
 )

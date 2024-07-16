@@ -20,6 +20,24 @@ ThisBuild / scalacOptions ++= Seq(
   "-language:implicitConversions"
 )
 
+ThisBuild / githubWorkflowBuildPreamble += {
+  import org.typelevel.sbt.gha.*
+  import WorkflowStep.*
+
+  val paths =
+    List(
+      "~/Library/Caches/sbt-vcpkg/vcpkg-install",
+      "~/.cache/sbt-vcpkg/vcpkg-install",
+      "~/.cache/sbt-vcpkg/vcpkg"
+    )
+
+  Use(
+    UseRef.Public("actions", "cache", "v4"),
+    name = Some("Cache vcpkg"),
+    params = Map("key" -> "${{ runner.os }}-sbt-vcpkg", "path" -> paths.mkString("\n"))
+  )
+}
+
 val Scala3 = "3.4.1"
 ThisBuild / scalaVersion := Scala3 // the default Scala
 

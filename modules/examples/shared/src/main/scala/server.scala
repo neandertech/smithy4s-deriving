@@ -42,7 +42,7 @@ object server extends IOApp.Simple {
         EmberServerBuilder
           .default[IO]
           .withHttpApp(_)
-          .withPort(port"8080")
+          .withPort(port"9777")
           .withHost(host"localhost")
           .build
       )

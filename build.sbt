@@ -24,12 +24,12 @@ ThisBuild / scalaVersion := Scala3 // the default Scala
 testFrameworks += new TestFramework("munit.Framework")
 
 val smithyVersion = "1.47.0"
-val smithy4sVersion = "0.18.16"
+val smithy4sVersion = "0.18.23"
 val alloyVersion = "0.3.7"
 
 lazy val root = tlCrossRootProject.aggregate(core, examples, plugin, pluginBundle, tests)
 
-lazy val core = crossProject(JVMPlatform, JSPlatform)
+lazy val core = crossProject(JVMPlatform, JSPlatform, NativePlatform)
   .in(file("modules/core"))
   .settings(
     name := "smithy4s-deriving",
@@ -89,16 +89,21 @@ lazy val tests = crossProject(JVMPlatform)
     )
   )
 
-lazy val examples = crossProject(JVMPlatform, JSPlatform)
+lazy val examples = crossProject(JVMPlatform, JSPlatform, NativePlatform)
   .in(file("modules/examples"))
   .dependsOn(core)
   .enablePlugins(NoPublishPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      "com.disneystreaming.smithy4s" %% "smithy4s-http4s" % smithy4sVersion,
-      "com.disneystreaming.smithy4s" %% "smithy4s-dynamic" % smithy4sVersion,
-      "org.http4s" %% "http4s-ember-client" % "0.23.26",
-      "org.http4s" %% "http4s-ember-server" % "0.23.26"
+      "com.disneystreaming.smithy4s" %%% "smithy4s-http4s" % smithy4sVersion,
+      "com.disneystreaming.smithy4s" %%% "smithy4s-dynamic" % smithy4sVersion,
+      "org.http4s" %%% "http4s-ember-client" % "0.23.26",
+      "org.http4s" %%% "http4s-ember-server" % "0.23.26",
+      // This particular version of fs2-io performs evictions of core CE and
+      // fs2 libraries so that networking with Ember works out of the box
+      // It still requires all necessary native dependencies (openssl, s2n, zlib)
+      // to be installed globally
+      "co.fs2" %%% "fs2-io" % "3.10-365636d"
     ),
     autoCompilerPlugins := true,
     Compile / fork := true,
@@ -112,6 +117,19 @@ lazy val examples = crossProject(JVMPlatform, JSPlatform)
     libraryDependencies ++= Seq(
       "software.amazon.smithy" % "smithy-model" % smithyVersion
     )
+  )
+  .nativeEnablePlugins(VcpkgNativePlugin)
+  .nativeSettings(
+    vcpkgDependencies := VcpkgDependencies(
+      "curl",
+      "s2n",
+      "openssl"
+    ),
+    vcpkgNativeConfig ~= {
+      _.withRenamedLibraries(
+        Map("curl" -> "libcurl")
+      )
+    }
   )
   .jsSettings(
     Test / fork := false

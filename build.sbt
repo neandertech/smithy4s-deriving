@@ -131,7 +131,8 @@ lazy val examples = crossProject(JVMPlatform, JSPlatform, NativePlatform)
       _.withRenamedLibraries(
         Map("curl" -> "libcurl")
       )
-    }
+    },
+    Test / fork := false
   )
   .jsSettings(
     Test / fork := false

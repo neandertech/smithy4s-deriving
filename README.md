@@ -42,9 +42,7 @@ import alloy.* // if you want to use hints from the alloy library
 ```
 
 
-The `smithy4s-deriving` library is provided for Scala JVM and Scala JS (1.16+), and is currently compatible with smithy4s 0.18.16+.
-
-Scala Native support will come after smithy4s upgrades to SN `0.5.+`, which will take time.
+The `smithy4s-deriving` library is provided for Scala JVM, Scala JS (1.16+) and Scala Native (0.4.x), and is currently compatible with smithy4s 0.18.16+.
 
 ## Examples
 

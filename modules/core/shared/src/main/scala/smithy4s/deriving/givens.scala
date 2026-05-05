@@ -17,6 +17,7 @@
 package smithy4s.deriving
 
 import smithy4s._
+import smithy4s.time.Timestamp
 
 import java.util.UUID
 

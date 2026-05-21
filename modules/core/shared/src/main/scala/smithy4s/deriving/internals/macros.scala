@@ -612,8 +612,10 @@ private def enumSchemaExpression[Enum: Type, Members: Type](using Quotes) : Opti
     '{
       val (areInts, enumValues) = $enumValuesExpr.unzip
       val enumMap = enumValues.map(ev => ev.value -> ev).toMap
-      val enumTag = if (areInts.reduce(_ && _)) EnumTag.ClosedIntEnum else EnumTag.ClosedStringEnum
-      Schema.enumeration(enumMap, enumTag, enumValues)
+      val enumTag =
+        if (areInts.reduce(_ && _)) EnumTag.IntEnum[Enum](e => enumMap(e).intValue, None)
+        else EnumTag.StringEnum[Enum](e => enumMap(e).stringValue, None)
+      Schema.enumeration(enumTag, enumValues)
     }
   }
   else None

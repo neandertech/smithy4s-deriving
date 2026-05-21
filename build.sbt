@@ -43,9 +43,9 @@ ThisBuild / scalaVersion := Scala3 // the default Scala
 
 testFrameworks += new TestFramework("munit.Framework")
 
-val smithyVersion = "1.47.0"
-val smithy4sVersion = "0.18.23"
-val alloyVersion = "0.3.7"
+val smithyVersion = "1.70.0"
+val smithy4sVersion = "0.19.2"
+val alloyVersion = "0.3.38"
 
 lazy val root = tlCrossRootProject.aggregate(core, examples, plugin, pluginBundle, tests)
 
@@ -103,7 +103,7 @@ lazy val tests = crossProject(JVMPlatform)
   .settings(
     libraryDependencies ++= Seq(
       "org.scalameta" %% "munit" % "0.7.29" % Test,
-      "com.disneystreaming.smithy4s" %%% "smithy4s-dynamic" % "0.18.16" % Test,
+      "com.disneystreaming.smithy4s" %%% "smithy4s-dynamic" % "0.19.2" % Test,
       "software.amazon.smithy" % "smithy-build" % smithyVersion % Test,
       "software.amazon.smithy" % "smithy-diff" % smithyVersion % Test
     )
@@ -117,13 +117,9 @@ lazy val examples = crossProject(JVMPlatform, JSPlatform, NativePlatform)
     libraryDependencies ++= Seq(
       "com.disneystreaming.smithy4s" %%% "smithy4s-http4s" % smithy4sVersion,
       "com.disneystreaming.smithy4s" %%% "smithy4s-dynamic" % smithy4sVersion,
-      "org.http4s" %%% "http4s-ember-client" % "0.23.26",
-      "org.http4s" %%% "http4s-ember-server" % "0.23.26",
-      // This particular version of fs2-io performs evictions of core CE and
-      // fs2 libraries so that networking with Ember works out of the box
-      // It still requires all necessary native dependencies (openssl, s2n, zlib)
-      // to be installed globally
-      "co.fs2" %%% "fs2-io" % "3.10-365636d"
+      "org.http4s" %%% "http4s-ember-client" % "0.23.34",
+      "org.http4s" %%% "http4s-ember-server" % "0.23.34",
+      "co.fs2" %%% "fs2-io" % "3.13.0"
     ),
     autoCompilerPlugins := true,
     Compile / fork := true,
